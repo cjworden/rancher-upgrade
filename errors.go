@@ -10,9 +10,9 @@ type actionAvailableError struct {
 }
 
 type upgradeError struct {
-	Action string
+	Action  string
 	Service string
-	Err error
+	Err     error
 }
 
 func (e *actionAvailableError) Error() string {
