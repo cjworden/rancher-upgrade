@@ -2,8 +2,8 @@ package main
 
 import (
 	"flag"
-	rancher "github.com/rancher/go-rancher/client"
 	log "github.com/Sirupsen/logrus"
+	rancher "github.com/rancher/go-rancher/client"
 	"strings"
 	"sync"
 	"time"
@@ -52,53 +52,77 @@ func upgradeServices(prefix, tag string, services []string) {
 }
 
 func upgradeServiceImage(serviceName, image string) {
-	if !actionAvailable("upgrade", serviceName) {
-		log.Errorf("%s was manually upgraded, skipping.", serviceName)
+	if err := actionAvailable("upgrade", serviceName); err != nil {
+		log.Error(err)
+		return
 	}
-	doUpgrade(serviceName, image)
-	for finishable := actionAvailable("finishupgrade", serviceName); finishable != true; finishable = actionAvailable("finishupgrade", serviceName) {
+	err := doUpgrade(serviceName, image)
+	if err != nil {
+		log.Errorf("Error trying to upgrade.\n%s", err)
+		return
+	}
+	for err := actionAvailable("finishupgrade", serviceName); err != nil; err = actionAvailable("finishupgrade", serviceName) {
 		time.Sleep(1 * time.Second)
 		log.Debugf(".")
 	}
 	doFinishUpgrade(serviceName)
 }
 
-func actionAvailable(action, service string) bool {
-	client := getNewClient()
+func actionAvailable(action, service string) error {
+	client, err := getNewClient()
+	if err != nil {
+		// If we can't connect then we're calling the action unavailable.
+		log.Error(err)
+		return &actionAvailableError{action, service}
+	}
+	if SERVICEMAP[service] == "" {
+		return &actionAvailableError{action, service}
+	}
 	s, err := client.Service.ById(SERVICEMAP[service])
 	if err != nil {
 		log.Error(err)
+		return &actionAvailableError{action, service}
 	}
 	_, ok := s.Resource.Actions[action]
-	return ok
+	if !ok {
+		return &actionAvailableError{action, service}
+	}
+	return nil
 }
 
-func doFinishUpgrade(service string) {
-	if !actionAvailable("finishupgrade", service) {
-		return
+func doFinishUpgrade(service string) error {
+	if err := actionAvailable("finishupgrade", service); err != nil {
+		return &upgradeError{"finishupgrade", service, err}
 	}
 	log.Infof("Finishing Upgrade on %s.", service)
-	client := getNewClient()
+	client, err := getNewClient()
+	if err != nil {
+		return err
+	}
 	s, err := client.Service.ById(SERVICEMAP[service])
 	if err != nil {
-		log.Error(err)
+		return err
 	}
 	_, err = client.Service.ActionFinishupgrade(s)
 	if err != nil {
-		log.Error(err)
+		return err
 	}
+	return nil
 }
 
-func doUpgrade(serviceName, image string) {
-	if !actionAvailable("upgrade", serviceName) {
-		return
+func doUpgrade(serviceName, image string) error {
+	if err := actionAvailable("upgrade", serviceName); err != nil {
+		return &actionAvailableError{"upgrade", serviceName}
 	}
 	log.Infof("Upgrading Service %s.", serviceName)
-	client := getNewClient()
+	client, err := getNewClient()
+	if err != nil {
+		return &upgradeError{"getNewClient", serviceName, err}
+	}
 	// Get Service object
 	service, err := client.Service.ById(SERVICEMAP[serviceName])
 	if err != nil {
-		log.Error(err)
+		return &upgradeError{"client.Service.ById", serviceName, err}
 	}
 
 	// Update settings
@@ -108,16 +132,17 @@ func doUpgrade(serviceName, image string) {
 	// Perform Upgrade
 	service, err = client.Service.ActionUpgrade(service, service.Upgrade)
 	if err != nil {
-		log.Error(err)
+		return &upgradeError{"client.Service.ActionUpgrade", serviceName, err}
 	}
+	return nil
 }
 
-func getNewClient() *rancher.RancherClient {
+func getNewClient() (*rancher.RancherClient, error) {
 	var client, err = rancher.NewRancherClient(&rancher.ClientOpts{Url: *SERVER, AccessKey: *ACCESSKEY, SecretKey: *SECRETKEY})
 	if err != nil {
-		log.Error(err)
+		return nil, err
 	}
-	return client
+	return client, nil
 }
 
 func init() {
@@ -134,22 +159,29 @@ func init() {
 	}
 	IMAGETAG = tag
 	// Do this after parsing flags since it uses them...
-	SERVICEMAP = createServiceMap()
+	var err error
+	SERVICEMAP, err = createServiceMap()
+	if err != nil {
+		log.Fatalf("Failed creating the service map.\n%s", err)
+	}
 }
 
-func createServiceMap() map[string]string {
-	client := getNewClient()
+func createServiceMap() (map[string]string, error) {
+	client, err := getNewClient()
+	if err != nil {
+		return nil, err
+	}
 	var lOpts rancher.ListOpts
 	serviceCollection, err := client.Service.List(&lOpts)
 	if err != nil {
-		log.Error(err)
+		return nil, err
 	}
 
 	var serviceMap = make(map[string]string)
 	for _, service := range serviceCollection.Data {
 		serviceMap[service.Name] = service.Id
 	}
-	return serviceMap
+	return serviceMap, nil
 }
 
 func InitializeLogging(logLevel string) {
