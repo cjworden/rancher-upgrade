@@ -75,7 +75,7 @@ func actionAvailable(action, service string) error {
 		log.Error(err)
 		return &actionAvailableError{action, service}
 	}
-	if SERVICEMAP[service] == "" {
+	if _, ok := SERVICEMAP[service]; !ok {
 		return &serviceMapError{service}
 	}
 	s, err := client.Service.ById(SERVICEMAP[service])
@@ -99,7 +99,7 @@ func doFinishUpgrade(service string) error {
 	if err != nil {
 		return &upgradeError{"finishupgrade", service, err}
 	}
-	if SERVICEMAP[service] == "" {
+	if _, ok := SERVICEMAP[service]; !ok {
 		return &serviceMapError{service}
 	}
 	s, err := client.Service.ById(SERVICEMAP[service])
@@ -123,7 +123,7 @@ func doUpgrade(serviceName, image string) error {
 		return &upgradeError{"getNewClient", serviceName, err}
 	}
 	// Get Service object
-	if SERVICEMAP[serviceName] == "" {
+	if _, ok := SERVICEMAP[serviceName]; !ok {
 		return &serviceMapError{serviceName}
 	}
 	service, err := client.Service.ById(SERVICEMAP[serviceName])
