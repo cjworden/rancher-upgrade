@@ -97,15 +97,18 @@ func doFinishUpgrade(service string) error {
 	log.Infof("Finishing Upgrade on %s.", service)
 	client, err := getNewClient()
 	if err != nil {
-		return err
+		return &upgradeError{"finishupgrade", service, err}
+	}
+	if SERVICEMAP[service] == "" {
+		return &actionAvailableError{action, service}
 	}
 	s, err := client.Service.ById(SERVICEMAP[service])
 	if err != nil {
-		return err
+		return &upgradeError{"finishupgrade", service, err}
 	}
 	_, err = client.Service.ActionFinishupgrade(s)
 	if err != nil {
-		return err
+		return &upgradeError{"finishupgrade", service, err}
 	}
 	return nil
 }
@@ -120,6 +123,9 @@ func doUpgrade(serviceName, image string) error {
 		return &upgradeError{"getNewClient", serviceName, err}
 	}
 	// Get Service object
+	if SERVICEMAP[service] == "" {
+		return &actionAvailableError{action, service}
+	}
 	service, err := client.Service.ById(SERVICEMAP[serviceName])
 	if err != nil {
 		return &upgradeError{"client.Service.ById", serviceName, err}
