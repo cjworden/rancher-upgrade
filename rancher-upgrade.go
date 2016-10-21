@@ -123,8 +123,8 @@ func doUpgrade(serviceName, image string) error {
 		return &upgradeError{"getNewClient", serviceName, err}
 	}
 	// Get Service object
-	if SERVICEMAP[service] == "" {
-		return &actionAvailableError{action, service}
+	if SERVICEMAP[serviceName] == "" {
+		return &actionAvailableError{action, serviceName}
 	}
 	service, err := client.Service.ById(SERVICEMAP[serviceName])
 	if err != nil {
