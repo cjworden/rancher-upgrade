@@ -132,6 +132,16 @@ func doUpgrade(serviceName, image string) error {
 	}
 
 	// Update settings
+	if service.Upgrade == nil {
+		log.Debugf("%s hasn't been upgraded before, initializing upgrade strategy.", serviceName)
+		service.Upgrade = &rancher.ServiceUpgrade{InServiceStrategy: &rancher.InServiceUpgradeStrategy{
+			BatchSize: 1,
+			IntervalMillis: 2000,
+			LaunchConfig: service.LaunchConfig,
+			PreviousLaunchConfig: service.LaunchConfig,
+			StartFirst: true,
+		}}
+	}
 	service.Upgrade.InServiceStrategy.StartFirst = true
 	service.Upgrade.InServiceStrategy.LaunchConfig.ImageUuid = "docker:" + image
 
